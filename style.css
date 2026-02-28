@@ -283,3 +283,15 @@ button:hover{opacity:.95}
   opacity: 0;
   transform: translateY(-4px);
 }
+
+/* JS mouseover helper */
+.card.hovered .hint{
+  display: inline;
+}
+.hint{
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  padding: 3px 8px;
+  border-radius: 999px;
+}

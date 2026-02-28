@@ -4,74 +4,41 @@ import { showToast } from "./toast.js";
 export function renderApp(store) {
   const list = document.getElementById("taskList");
   const stats = document.getElementById("stats");
-  if (!list) return;
 
   const today = new Date().toISOString().slice(0, 10);
-  const week = getWeekDatesMondayToSunday(today); // semana actual (lun->dom)
 
   const visible = store.getVisible();
-
-  // ---- Progreso HOY (del filtro actual) ----
   const total = visible.length;
-  const doneTodayCount = visible.filter(h => (h.history || []).includes(today)).length;
-  const pendingTodayCount = total - doneTodayCount;
-
-  // ---- Progreso SEMANAL GLOBAL (semana actual) ----
-  const weekDone = visible.reduce((acc, h) => acc + countInRange(h.history || [], week), 0);
-  const weekTotal = visible.reduce((acc, h) => {
-    if (h.schedule === "weekly") return acc + Number(h.goalPerWeek || 3);
-    return acc + 7;
-  }, 0);
-  const weekPct = weekTotal === 0 ? 0 : Math.round((weekDone / weekTotal) * 100);
+  const done = visible.filter(h => (h.history || []).includes(today)).length;
+  const pending = total - done;
 
   if (stats) {
-    stats.textContent =
-      `Hábitos: ${total} · Hoy: ${doneTodayCount} hechos · ${pendingTodayCount} pendientes · Semana: ${weekDone}/${weekTotal} checks`;
+    stats.textContent = `Hábitos: ${total} · Hoy: ${done} hechos · ${pending} pendientes`;
   }
 
-  // Barra HOY (la tuya existente)
+  // Progreso (del filtro actual)
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   const progressBar = document.getElementById("progressBar");
   const progressPct = document.getElementById("progressPct");
   const progressLabel = document.getElementById("progressLabel");
-  const pctToday = total === 0 ? 0 : Math.round((doneTodayCount / total) * 100);
-  if (progressBar) progressBar.style.width = `${pctToday}%`;
-  if (progressPct) progressPct.textContent = `${pctToday}%`;
-  if (progressLabel) progressLabel.textContent = `Hoy: ${doneTodayCount}/${total}`;
 
-  // Barra SEMANAL global (nueva)
-  const weekBar = document.getElementById("weekProgressBar");
-  const weekPctEl = document.getElementById("weekProgressPct");
-  const weekLabelEl = document.getElementById("weekProgressLabel");
-  if (weekBar) weekBar.style.width = `${weekPct}%`;
-  if (weekPctEl) weekPctEl.textContent = `${weekPct}%`;
-  if (weekLabelEl) weekLabelEl.textContent = `Semana (L-D): ${weekDone}/${weekTotal}`;
+  if (progressBar) progressBar.style.width = `${pct}%`;
+  if (progressPct) progressPct.textContent = `${pct}%`;
+  if (progressLabel) progressLabel.textContent = `Hoy: ${done}/${total}`;
 
-  // Render según vista
   list.innerHTML = "";
 
-  if (store.ui.view === "week") {
-    renderWeekTable(list, visible, week, store);
-    return;
-  }
-
-  // ---- Vista HOY (cards) ----
   visible.forEach(h => {
-    const history = h.history || [];
-    const doneToday = history.includes(today);
-    const streak = calcStreak(history, today);
-
-    const priority = h.priority || "medium";
-    const category = h.category || "general";
-
-    // Cumplimiento semana actual
-    const weekCount = countInRange(history, week);
-    const weekGoal = h.schedule === "weekly" ? Number(h.goalPerWeek || 3) : 7;
-    const weekLabel = `${Math.min(weekCount, weekGoal)}/${weekGoal}`;
+    const doneToday = (h.history || []).includes(today);
+    const streak = calcStreak(h.history || [], today);
 
     const li = document.createElement("li");
     li.className = `card ${doneToday ? "done" : "pending"}`;
     li.draggable = true;
     li.dataset.id = h.id;
+
+    // ✅ si hay dueTime, guardamos para countdown
+    if (h.dueTime) li.dataset.duetime = h.dueTime;
 
     li.innerHTML = `
       <div class="top">
@@ -79,31 +46,23 @@ export function renderApp(store) {
           <input type="checkbox" ${doneToday ? "checked" : ""} />
           <span>${escapeHtml(h.title)}</span>
         </div>
-
-        <div style="display:flex; gap:8px; align-items:center;">
-          <div class="badge ${getWeekBadgeClass(weekCount, weekGoal)}">✅ ${escapeHtml(weekLabel)}</div>
-          <div class="badge pr-${escapeHtml(priority)}">${escapeHtml(priority)}</div>
-        </div>
+        <div class="badge pr-${escapeHtml(h.priority || "medium")}">${escapeHtml(h.priority || "medium")}</div>
       </div>
 
       <div class="meta">
-        <span>🏷 ${escapeHtml(category)}</span>
+        <span>🏷 ${escapeHtml(h.category || "general")}</span>
         <span>🔥 Racha: ${streak} día${streak === 1 ? "" : "s"}</span>
-        ${h.dueTime ? `<span>⏰ ${escapeHtml(h.dueTime)}</span>` : ""}
+        ${h.dueTime ? `<span>⏰ ${escapeHtml(h.dueTime)} · <b data-countdown>--:--:--</b></span>` : ""}
         ${h.schedule === "weekly"
-          ? `<span>📅 Semanal (${Number(h.goalPerWeek || 3)}/sem)</span>`
+          ? `<span>📅 Meta: ${Number(h.goalPerWeek || 3)}/sem</span>`
           : `<span>📅 Diario</span>`}
+        <span class="hint" hidden>Tip: marca el checkbox para registrar HOY ✅</span>
       </div>
 
       ${h.description ? `<p class="desc">${escapeHtml(h.description)}</p>` : ""}
 
       <div class="tags">
         ${(h.tags || []).map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}
-      </div>
-
-      <div class="habit-week">
-        ${renderWeekDots(history, week)}
-        <span class="week-label">semana actual</span>
       </div>
 
       <div class="actions">
@@ -117,36 +76,27 @@ export function renderApp(store) {
     requestAnimationFrame(() => li.classList.add("enter-active"));
     setTimeout(() => li.classList.remove("enter", "enter-active"), 220);
 
-    // Toggle HOY
+    // ✅ mouseover/mouseenter (cumple pauta)
+    const hint = li.querySelector(".hint");
+    li.addEventListener("mouseenter", () => {
+      li.classList.add("hovered");
+      if (hint) hint.hidden = false;
+    });
+    li.addEventListener("mouseleave", () => {
+      li.classList.remove("hovered");
+      if (hint) hint.hidden = true;
+    });
+
+    // Toggle "cumplido hoy"
     li.querySelector('input[type="checkbox"]').addEventListener("change", () => {
       store.toggleToday(h.id);
       showToast(doneToday ? "Check-in removido ↩️" : "Check-in de hoy ✅", "ok");
 
-      // pop weekly badge
-      const wb = li.querySelector(".badge-week-low, .badge-week-mid, .badge-week-high");
-      if (wb) { wb.style.transform = "scale(1.03)"; setTimeout(() => (wb.style.transform = ""), 140); }
+      li.style.transform = "scale(0.995)";
+      setTimeout(() => (li.style.transform = ""), 120);
 
       renderApp(store);
     });
-
-    // Click dots (histórico semana actual)
-    const weekWrap = li.querySelector(".habit-week");
-    if (weekWrap) {
-      weekWrap.addEventListener("click", (ev) => {
-        const dot = ev.target.closest(".day-dot");
-        if (!dot) return;
-
-        const dateStr = dot.dataset.date;
-        if (!dateStr) return;
-
-        store.toggleOnDate(h.id, dateStr);
-        dot.style.transform = "scale(1.15)";
-        setTimeout(() => (dot.style.transform = ""), 140);
-
-        showToast(`Actualizado: ${dateStr}`, "info");
-        renderApp(store);
-      });
-    }
 
     // Delete (exit animation)
     li.querySelector('[data-action="delete"]').addEventListener("click", () => {
@@ -167,6 +117,7 @@ export function renderApp(store) {
           ...patch,
           goalPerWeek: patch.goalPerWeek !== undefined ? Number(patch.goalPerWeek || 3) : undefined,
         };
+
         store.update(h.id, next);
         showToast("Hábito actualizado ✨", "ok");
         renderApp(store);
@@ -183,7 +134,7 @@ export function renderApp(store) {
     list.appendChild(li);
   });
 
-  // drop handler
+  // drop handler (en el UL)
   list.ondragover = (e) => {
     e.preventDefault();
     const dragging = list.querySelector(".dragging");
@@ -198,72 +149,11 @@ export function renderApp(store) {
     store.reorder(ids);
     showToast("Orden guardado 📌", "info");
   };
+
+  // ✅ Countdown (cumple pauta)
+  startCountdownTicker(list);
 }
 
-// ---------- Week view table ----------
-function renderWeekTable(container, habits, weekDates, store) {
-  const header = weekDates.map(d => d.slice(5)).map(x => `<th>${x}</th>`).join("");
-
-  const rows = habits.map(h => {
-    const history = h.history || [];
-    const tds = weekDates.map(d => {
-      const on = history.includes(d);
-      return `
-        <td class="week-cell">
-          <span class="week-toggle ${on ? "on" : ""}" data-id="${h.id}" data-date="${d}" title="${d}"></span>
-        </td>
-      `;
-    }).join("");
-
-    return `
-      <tr>
-        <td>
-          <div class="week-habit">
-            <span class="name">${escapeHtml(h.title)}</span>
-            <span class="badge">${escapeHtml(h.category || "general")}</span>
-          </div>
-        </td>
-        ${tds}
-      </tr>
-    `;
-  }).join("");
-
-  container.innerHTML = `
-    <div class="week-view">
-      <table class="week-table">
-        <thead>
-          <tr>
-            <th>Hábito</th>
-            ${header}
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
-      <div class="week-legend">Tip: clic en un cuadrito para marcar/desmarcar ese día.</div>
-    </div>
-  `;
-
-  container.querySelector(".week-view").addEventListener("click", (ev) => {
-    const cell = ev.target.closest(".week-toggle");
-    if (!cell) return;
-
-    const id = cell.dataset.id;
-    const dateStr = cell.dataset.date;
-    if (!id || !dateStr) return;
-
-    store.toggleOnDate(id, dateStr);
-
-    cell.style.transform = "scale(1.15)";
-    setTimeout(() => (cell.style.transform = ""), 140);
-
-    showToast(`Actualizado: ${dateStr}`, "info");
-    renderApp(store);
-  });
-}
-
-// ---------- Drag helper ----------
 function getDragAfterElement(container, y) {
   const els = [...container.querySelectorAll("li.card:not(.dragging)")];
   return els.reduce((closest, child) => {
@@ -274,22 +164,11 @@ function getDragAfterElement(container, y) {
   }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
 }
 
-// ---------- Week dots ----------
-function renderWeekDots(history, weekDates) {
-  const set = new Set(history);
-  return weekDates
-    .map((d) => {
-      const on = set.has(d);
-      const label = d.slice(5);
-      return `<span class="day-dot ${on ? "on" : ""}" data-date="${d}" title="${label}"></span>`;
-    })
-    .join("");
-}
-
-// ---------- Utils ----------
+// Racha: días consecutivos hacia atrás desde "today"
 function calcStreak(history, todayStr) {
   const set = new Set(history);
   let streak = 0;
+
   for (let i = 0; i < 3650; i++) {
     const d = new Date(todayStr);
     d.setDate(d.getDate() - i);
@@ -300,37 +179,52 @@ function calcStreak(history, todayStr) {
   return streak;
 }
 
-function getWeekDatesMondayToSunday(todayStr) {
-  const base = new Date(todayStr);
-  const day = base.getDay(); // 0 dom, 1 lun...
-  const diffToMon = (day + 6) % 7; // lunes = 0
-  base.setDate(base.getDate() - diffToMon);
+// ✅ Actualiza todos los countdowns cada 1s sin re-render completo
+function startCountdownTicker(listEl) {
+  if (!listEl) return;
 
-  const out = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(base);
-    d.setDate(base.getDate() + i);
-    out.push(d.toISOString().slice(0, 10));
-  }
-  return out;
+  // evita duplicar intervals cada render
+  if (window.__habitCountdownInterval) clearInterval(window.__habitCountdownInterval);
+
+  const tick = () => {
+    const cards = listEl.querySelectorAll("li.card[data-duetime]");
+    const now = new Date();
+
+    cards.forEach((card) => {
+      const dueTime = card.dataset.duetime; // "HH:MM"
+      const out = card.querySelector("[data-countdown]");
+      if (!out || !dueTime) return;
+
+      const [hh, mm] = dueTime.split(":").map(Number);
+      if (Number.isNaN(hh) || Number.isNaN(mm)) {
+        out.textContent = "--:--:--";
+        return;
+      }
+
+      // target = hoy a la hora dueTime (si ya pasó, apunta a mañana)
+      const target = new Date();
+      target.setHours(hh, mm, 0, 0);
+      if (target <= now) target.setDate(target.getDate() + 1);
+
+      const diff = target - now;
+      out.textContent = formatMs(diff);
+    });
+  };
+
+  tick();
+  window.__habitCountdownInterval = setInterval(tick, 1000);
 }
 
-function countInRange(history, allowedDates) {
-  const set = new Set(allowedDates);
-  let c = 0;
-  for (const d of history) if (set.has(d)) c++;
-  return c;
-}
-
-function getWeekBadgeClass(count, goal) {
-  const ratio = goal === 0 ? 0 : count / goal;
-  if (ratio >= 1) return "badge-week-high";
-  if (ratio >= 0.5) return "badge-week-mid";
-  return "badge-week-low";
+function formatMs(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = String(Math.floor(total / 3600)).padStart(2, "0");
+  const m = String(Math.floor((total % 3600) / 60)).padStart(2, "0");
+  const s = String(total % 60).padStart(2, "0");
+  return `${h}:${m}:${s}`;
 }
 
 function escapeHtml(str) {
-  return String(str ?? "").replace(/[&<>"']/g, (s) =>
+  return String(str).replace(/[&<>"']/g, (s) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[s])
   );
 }
