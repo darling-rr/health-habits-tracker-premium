@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Health Habits Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="header">
+    <h1>Health Habits Tracker</h1>
+    <div class="header-actions">
+      <button id="importDemo" type="button">Importar demo API</button>
+      <button id="viewToggle" type="button">📅 Ver semana</button>
+      <button id="theme" type="button">🌙/☀️</button>
+    </div>
+  </header>
+
+  <section class="controls">
+    <input id="q" placeholder="Buscar por título, tags, descripción…" />
+
+    <select id="filter">
+      <option value="all">Todos</option>
+      <option value="doneToday">Hechos hoy</option>
+      <option value="notDoneToday">Pendientes hoy</option>
+    </select>
+
+    <select id="sort">
+      <option value="order">Orden manual</option>
+      <option value="created">Fecha creación</option>
+      <option value="priority">Prioridad</option>
+    </select>
+  </section>
+
+  <section class="panel">
+    <div id="stats" class="stats"></div>
+
+    <!-- Progreso HOY -->
+    <div class="progress-wrap">
+      <div class="progress-top">
+        <span id="progressLabel">Hoy</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-track" aria-label="Progreso de hoy">
+        <div id="progressBar" class="progress-bar" style="width: 0%"></div>
+      </div>
+    </div>
+
+    <!-- Progreso SEMANA (nuevo) -->
+    <div class="week-progress-wrap">
+      <div class="week-progress-top">
+        <span id="weekProgressLabel">Semana</span>
+        <span id="weekProgressPct">0%</span>
+      </div>
+      <div class="week-progress-track" aria-label="Progreso semanal">
+        <div id="weekProgressBar" class="week-progress-bar" style="width: 0%"></div>
+      </div>
+    </div>
+
+    <!-- Form crear hábito -->
+    <form id="taskForm" class="form">
+      <input name="title" placeholder="Hábito (ej: Tomar agua)" required />
+      <input name="description" placeholder="Descripción (opcional)" />
+
+      <select name="category">
+        <option value="general">General</option>
+        <option value="sueno">Sueño</option>
+        <option value="nutricion">Nutrición</option>
+        <option value="actividad">Actividad</option>
+        <option value="mente">Mente</option>
+        <option value="medicacion">Medicación</option>
+      </select>
+
+      <select name="priority">
+        <option value="low">low</option>
+        <option value="medium" selected>medium</option>
+        <option value="high">high</option>
+      </select>
+
+      <select name="schedule">
+        <option value="daily" selected>Diario</option>
+        <option value="weekly">Semanal</option>
+      </select>
+
+      <input name="goalPerWeek" type="number" min="1" max="7" value="3" title="Meta semanal (solo si es semanal)" />
+      <input name="dueTime" type="time" title="Hora sugerida (opcional)" />
+
+      <input name="tags" placeholder="tags: agua, gym, sueño (coma)" />
+      <button type="submit">Agregar</button>
+    </form>
+
+    <!-- Aquí se renderiza: cards (hoy) o tabla (semana) -->
+    <ul id="taskList" class="list"></ul>
+  </section>
+
+  <!-- Modal -->
+  <div id="editModal" class="modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Editar hábito</h3>
+        <button id="closeModal" type="button">✕</button>
+      </div>
+
+      <!-- OJO: tu modal.js puede inyectar campos extra, por eso lo dejamos simple -->
+      <form id="editForm" class="modal-form">
+        <input name="title" required />
+        <input name="description" />
+
+        <select name="priority">
+          <option value="low">low</option>
+          <option value="medium">medium</option>
+          <option value="high">high</option>
+        </select>
+
+        <input name="tags" placeholder="tags separados por coma" />
+        <button type="submit">Guardar</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
